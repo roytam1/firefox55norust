@@ -1,0 +1,6 @@
+repo: 8ba995b74e18334ab3707f27e9eb8f4e37ba3d29
+node: 33ce52b7c7ea6bcc57d6a97c56e2e74817ec47b3
+branch: default
+latesttag: FIREFOX_BETA_55_BASE
+latesttagdistance: 99
+changessincelatesttag: 213
