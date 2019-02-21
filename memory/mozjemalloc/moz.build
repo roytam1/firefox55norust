@@ -5,13 +5,25 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 EXPORTS += [
-    'mozjemalloc_types.h',
+    'jemalloc_types.h',
 ]
 
 SOURCES += [
-    'mozjemalloc.cpp',
+    'jemalloc.c',
 ]
 FINAL_LIBRARY = 'memory'
+
+# See bug 422055.
+if CONFIG['OS_ARCH'] == 'SunOS' and not CONFIG['GNU_CC'] \
+        and CONFIG['MOZ_OPTIMIZE']:
+    CFLAGS += ['-xO5']
+
+# For non release/esr builds, enable (some) fatal jemalloc assertions.  This
+# helps us catch memory errors.
+if CONFIG['MOZ_UPDATE_CHANNEL'] not in ('release', 'esr'):
+    DEFINES['MOZ_JEMALLOC_HARD_ASSERTS'] = True
+
+DEFINES['abort'] = 'moz_abort'
 
 DEFINES['MOZ_JEMALLOC_IMPL'] = True
 
@@ -19,11 +31,8 @@ LOCAL_INCLUDES += [
     '/memory/build',
 ]
 
-if CONFIG['GNU_CXX']:
-    # too many warnings from functions generated through rb_wrab from rb.h.
-    CXXFLAGS += ['-Wno-unused-function']
+if CONFIG['GNU_CC']:
+    CFLAGS += ['-Wno-unused'] # too many annoying warnings from mfbt/ headers
 
 if CONFIG['_MSC_VER']:
-    CXXFLAGS += ['-wd4273'] # inconsistent dll linkage (bug 558163)
-
-DISABLE_STL_WRAPPING = True
+    CFLAGS += ['-wd4273'] # inconsistent dll linkage (bug 558163)
