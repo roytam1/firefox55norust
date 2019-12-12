@@ -418,6 +418,28 @@ NS_IMPL_ISUPPORTS(AsyncDeleteAllFaviconsFromDisk, nsIRunnable)
 const char FaviconHelper::kJumpListCacheDir[] = "jumpListCache";
 const char FaviconHelper::kShortcutCacheDir[] = "shortcutCache";
 
+// apis available on vista and up.
+WinUtils::SHCreateItemFromParsingNamePtr WinUtils::sCreateItemFromParsingName = nullptr;
+WinUtils::SHGetKnownFolderPathPtr WinUtils::sGetKnownFolderPath = nullptr;
+
+// We just leak these DLL HMODULEs. There's no point in calling FreeLibrary
+// on them during shutdown anyway.
+static const wchar_t kShellLibraryName[] =  L"shell32.dll";
+static HMODULE sShellDll = nullptr;
+static const wchar_t kDwmLibraryName[] = L"dwmapi.dll";
+static HMODULE sDwmDll = nullptr;
+
+WinUtils::DwmExtendFrameIntoClientAreaProc WinUtils::dwmExtendFrameIntoClientAreaPtr = nullptr;
+WinUtils::DwmIsCompositionEnabledProc WinUtils::dwmIsCompositionEnabledPtr = nullptr;
+WinUtils::DwmSetIconicThumbnailProc WinUtils::dwmSetIconicThumbnailPtr = nullptr;
+WinUtils::DwmSetIconicLivePreviewBitmapProc WinUtils::dwmSetIconicLivePreviewBitmapPtr = nullptr;
+WinUtils::DwmGetWindowAttributeProc WinUtils::dwmGetWindowAttributePtr = nullptr;
+WinUtils::DwmSetWindowAttributeProc WinUtils::dwmSetWindowAttributePtr = nullptr;
+WinUtils::DwmInvalidateIconicBitmapsProc WinUtils::dwmInvalidateIconicBitmapsPtr = nullptr;
+WinUtils::DwmDefWindowProcProc WinUtils::dwmDwmDefWindowProcPtr = nullptr;
+WinUtils::DwmGetCompositionTimingInfoProc WinUtils::dwmGetCompositionTimingInfoPtr = nullptr;
+WinUtils::DwmFlushProc WinUtils::dwmFlushProcPtr = nullptr;
+
 // Prefix for path used by NT calls.
 const wchar_t kNTPrefix[] = L"\\??\\";
 const size_t kNTPrefixLen = ArrayLength(kNTPrefix) - 1;
@@ -441,6 +463,23 @@ static NtTestAlertPtr sNtTestAlert = nullptr;
 void
 WinUtils::Initialize()
 {
+  if (!sDwmDll) {
+    sDwmDll = ::LoadLibraryW(kDwmLibraryName);
+
+    if (sDwmDll) {
+      dwmExtendFrameIntoClientAreaPtr = (DwmExtendFrameIntoClientAreaProc)::GetProcAddress(sDwmDll, "DwmExtendFrameIntoClientArea");
+      dwmIsCompositionEnabledPtr = (DwmIsCompositionEnabledProc)::GetProcAddress(sDwmDll, "DwmIsCompositionEnabled");
+      dwmSetIconicThumbnailPtr = (DwmSetIconicThumbnailProc)::GetProcAddress(sDwmDll, "DwmSetIconicThumbnail");
+      dwmSetIconicLivePreviewBitmapPtr = (DwmSetIconicLivePreviewBitmapProc)::GetProcAddress(sDwmDll, "DwmSetIconicLivePreviewBitmap");
+      dwmGetWindowAttributePtr = (DwmGetWindowAttributeProc)::GetProcAddress(sDwmDll, "DwmGetWindowAttribute");
+      dwmSetWindowAttributePtr = (DwmSetWindowAttributeProc)::GetProcAddress(sDwmDll, "DwmSetWindowAttribute");
+      dwmInvalidateIconicBitmapsPtr = (DwmInvalidateIconicBitmapsProc)::GetProcAddress(sDwmDll, "DwmInvalidateIconicBitmaps");
+      dwmDwmDefWindowProcPtr = (DwmDefWindowProcProc)::GetProcAddress(sDwmDll, "DwmDefWindowProc");
+      dwmGetCompositionTimingInfoPtr = (DwmGetCompositionTimingInfoProc)::GetProcAddress(sDwmDll, "DwmGetCompositionTimingInfo");
+      dwmFlushProcPtr = (DwmFlushProc)::GetProcAddress(sDwmDll, "DwmFlush");
+    }
+  }
+
   if (IsWin10OrLater()) {
     HMODULE user32Dll = ::GetModuleHandleW(L"user32");
     if (user32Dll) {
@@ -1126,6 +1165,56 @@ WinUtils::InitMSG(UINT aMessage, WPARAM wParam, LPARAM lParam, HWND aWnd)
   return msg;
 }
 
+/* static */
+HRESULT
+WinUtils::SHCreateItemFromParsingName(PCWSTR pszPath, IBindCtx *pbc,
+                                      REFIID riid, void **ppv)
+{
+  if (sCreateItemFromParsingName) {
+    return sCreateItemFromParsingName(pszPath, pbc, riid, ppv);
+  }
+
+  if (!sShellDll) {
+    sShellDll = ::LoadLibraryW(kShellLibraryName);
+    if (!sShellDll) {
+      return false;
+    }
+  }
+
+  sCreateItemFromParsingName = (SHCreateItemFromParsingNamePtr)
+    GetProcAddress(sShellDll, "SHCreateItemFromParsingName");
+  if (!sCreateItemFromParsingName)
+    return E_FAIL;
+
+  return sCreateItemFromParsingName(pszPath, pbc, riid, ppv);
+}
+
+/* static */
+HRESULT 
+WinUtils::SHGetKnownFolderPath(REFKNOWNFOLDERID rfid,
+                               DWORD dwFlags,
+                               HANDLE hToken,
+                               PWSTR *ppszPath)
+{
+  if (sGetKnownFolderPath) {
+    return sGetKnownFolderPath(rfid, dwFlags, hToken, ppszPath);
+  }
+
+  if (!sShellDll) {
+    sShellDll = ::LoadLibraryW(kShellLibraryName);
+    if (!sShellDll) {
+      return false;
+    }
+  }
+
+  sGetKnownFolderPath = (SHGetKnownFolderPathPtr)
+    GetProcAddress(sShellDll, "SHGetKnownFolderPath");
+  if (!sGetKnownFolderPath)
+    return E_FAIL;
+
+  return sGetKnownFolderPath(rfid, dwFlags, hToken, ppszPath);
+}
+
 static BOOL
 WINAPI EnumFirstChild(HWND hwnd, LPARAM lParam)
 {
@@ -1809,41 +1898,111 @@ WinUtils::GetMaxTouchPoints()
   return 0;
 }
 
+#pragma pack(push, 1)
+typedef struct REPARSE_DATA_BUFFER {
+  ULONG  ReparseTag;
+  USHORT ReparseDataLength;
+  USHORT Reserved;
+  union {
+    struct {
+      USHORT SubstituteNameOffset;
+      USHORT SubstituteNameLength;
+      USHORT PrintNameOffset;
+      USHORT PrintNameLength;
+      ULONG  Flags;
+      WCHAR  PathBuffer[1];
+    } SymbolicLinkReparseBuffer;
+    struct {
+      USHORT SubstituteNameOffset;
+      USHORT SubstituteNameLength;
+      USHORT PrintNameOffset;
+      USHORT PrintNameLength;
+      WCHAR  PathBuffer[1];
+    } MountPointReparseBuffer;
+    struct {
+      UCHAR DataBuffer[1];
+    } GenericReparseBuffer;
+  };
+} REPARSE_DATA_BUFFER, *PREPARSE_DATA_BUFFER;
+#pragma pack(pop)
+
 /* static */
 bool
-WinUtils::ResolveJunctionPointsAndSymLinks(std::wstring& aPath)
+WinUtils::ResolveMovedUsersFolder(std::wstring& aPath)
 {
-  wchar_t path[MAX_PATH] = { 0 };
+  wchar_t* usersPath;
+  if (FAILED(WinUtils::SHGetKnownFolderPath(FOLDERID_UserProfiles, 0, nullptr,
+                                            &usersPath))) {
+    return false;
+  }
 
-  nsAutoHandle handle(
-    ::CreateFileW(aPath.c_str(),
-                  0,
+  // Ensure usersPath gets freed properly.
+  UniquePtr<wchar_t, CoTaskMemFreePolicy> autoFreePath(usersPath);
+
+  // Is aPath in Users folder?
+  size_t usersLen = wcslen(usersPath);
+  if (_wcsnicmp(aPath.c_str(), usersPath, usersLen) != 0 ||
+      aPath[usersLen] != L'\\') {
+    return true;
+  }
+
+  DWORD attributes = ::GetFileAttributesW(usersPath);
+  if (attributes == INVALID_FILE_ATTRIBUTES) {
+    return false;
+  }
+
+  // Junction points are implemented as reparse points, is the Users folder one?
+  if (!(attributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
+    return true;
+  }
+
+  // Get the reparse point data.
+  nsAutoHandle usersHandle(
+    ::CreateFileW(usersPath, 0,
                   FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                  nullptr,
-                  OPEN_EXISTING,
-                  FILE_FLAG_BACKUP_SEMANTICS,
+                  nullptr, OPEN_EXISTING,
+                  FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
                   nullptr));
 
-  if (handle == INVALID_HANDLE_VALUE) {
+  char maxReparseBuf[MAXIMUM_REPARSE_DATA_BUFFER_SIZE] = {0};
+  REPARSE_DATA_BUFFER* reparseBuf = (REPARSE_DATA_BUFFER*)maxReparseBuf;
+  DWORD bytesReturned = 0;
+  if (!::DeviceIoControl(usersHandle, FSCTL_GET_REPARSE_POINT, nullptr, 0,
+                         reparseBuf, MAXIMUM_REPARSE_DATA_BUFFER_SIZE,
+                         &bytesReturned, nullptr)) {
     return false;
   }
 
-  DWORD pathLen = GetFinalPathNameByHandleW(
-    handle, path, MAX_PATH, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
-  if (pathLen == 0 || pathLen >= MAX_PATH) {
+  // Check to see if the reparse point is a junction point.
+  if (reparseBuf->ReparseTag != IO_REPARSE_TAG_MOUNT_POINT) {
+    return true;
+  }
+
+  // The offset and length are in bytes. Length doesn't include null.
+  wchar_t* substituteName = reparseBuf->MountPointReparseBuffer.PathBuffer +
+    reparseBuf->MountPointReparseBuffer.SubstituteNameOffset / sizeof(wchar_t);
+  std::wstring::size_type substituteLen =
+    reparseBuf->MountPointReparseBuffer.SubstituteNameLength / sizeof(wchar_t);
+
+  // If the substitute path starts with the NT namespace then remove it.
+  if (wcsncmp(substituteName, kNTPrefix, kNTPrefixLen) == 0) {
+    substituteName += kNTPrefixLen;
+    substituteLen -= kNTPrefixLen;
+  }
+
+  // Check that what remains looks like a drive letter path.
+  if (substituteName[1] != L':' || substituteName[2] != L'\\') {
     return false;
   }
-  aPath = path;
 
-  // GetFinalPathNameByHandle sticks a '\\?\' in front of the path,
-  // but that confuses some APIs so strip it off. It will also put
-  // '\\?\UNC\' in front of network paths, we convert that to '\\'.
-  if (aPath.compare(0, 7, L"\\\\?\\UNC") == 0) {
-    aPath.erase(2, 6);
-  } else if (aPath.compare(0, 4, L"\\\\?\\") == 0) {
-    aPath.erase(0, 4);
+  // The documentation for SHGetKnownFolderPath says that it doesn't return a
+  // trailing backslash. The REPARSE_DATA_BUFFER path doesn't seem to have one
+  // either, but the documentation doesn't mention it, so let's make sure.
+  if (substituteName[substituteLen - 1] == L'\\') {
+    --substituteLen;
   }
 
+  aPath.replace(0, usersLen, substituteName, substituteLen);
   return true;
 }
 

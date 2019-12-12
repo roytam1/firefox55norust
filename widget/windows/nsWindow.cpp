@@ -855,15 +855,15 @@ nsWindow::Create(nsIWidget* aParent,
     return NS_ERROR_FAILURE;
   }
 
-  if (mIsRTL) {
+  if (mIsRTL && WinUtils::dwmSetWindowAttributePtr) {
     DWORD dwAttribute = TRUE;    
-    DwmSetWindowAttribute(mWnd, DWMWA_NONCLIENT_RTL_LAYOUT, &dwAttribute, sizeof dwAttribute);
+    WinUtils::dwmSetWindowAttributePtr(mWnd, DWMWA_NONCLIENT_RTL_LAYOUT, &dwAttribute, sizeof dwAttribute);
   }
 
-  if (mOpeningAnimationSuppressed) {
+  if (mOpeningAnimationSuppressed && WinUtils::dwmSetWindowAttributePtr) {
     DWORD dwAttribute = TRUE;
-    DwmSetWindowAttribute(mWnd, DWMWA_TRANSITIONS_FORCEDISABLED,
-                          &dwAttribute, sizeof dwAttribute);
+    WinUtils::dwmSetWindowAttributePtr(mWnd, DWMWA_TRANSITIONS_FORCEDISABLED,
+                                       &dwAttribute, sizeof dwAttribute);
   }
 
   if (!IsPlugin() &&
@@ -1649,10 +1649,10 @@ nsWindow::Show(bool bState)
   }
 #endif
 
-  if (mOpeningAnimationSuppressed) {
+  if (mOpeningAnimationSuppressed && WinUtils::dwmSetWindowAttributePtr) {
     DWORD dwAttribute = FALSE;
-    DwmSetWindowAttribute(mWnd, DWMWA_TRANSITIONS_FORCEDISABLED,
-                          &dwAttribute, sizeof dwAttribute);
+    WinUtils::dwmSetWindowAttributePtr(mWnd, DWMWA_TRANSITIONS_FORCEDISABLED,
+                                       &dwAttribute, sizeof dwAttribute);
   }
 }
 
@@ -3163,8 +3163,8 @@ void nsWindow::UpdateGlass()
 
   // Extends the window frame behind the client area
   if (nsUXThemeData::CheckForCompositor()) {
-    DwmExtendFrameIntoClientArea(mWnd, &margins);
-    DwmSetWindowAttribute(mWnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof policy);
+    WinUtils::dwmExtendFrameIntoClientAreaPtr(mWnd, &margins);
+    WinUtils::dwmSetWindowAttributePtr(mWnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof policy);
   }
 }
 #endif
@@ -5074,7 +5074,7 @@ nsWindow::ProcessMessage(UINT msg, WPARAM& wParam, LPARAM& lParam,
       /* We don't do this for win10 glass with a custom titlebar,
        * in order to avoid the caption buttons breaking. */
       !(IsWin10OrLater() && HasGlass()) &&
-      DwmDefWindowProc(mWnd, msg, wParam, lParam, &dwmHitResult)) {
+      WinUtils::dwmDwmDefWindowProcPtr(mWnd, msg, wParam, lParam, &dwmHitResult)) {
     *aRetValue = dwmHitResult;
     return true;
   }
