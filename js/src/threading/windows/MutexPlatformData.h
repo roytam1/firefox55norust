@@ -4,16 +4,16 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#ifndef MutexPlatformData_windows_h
-#define MutexPlatformData_windows_h
+#ifndef platform_win_MutexPlatformData_h
+#define platform_win_MutexPlatformData_h
 
-#include <windows.h>
+#include "jswin.h"
 
-#include "mozilla/PlatformMutex.h"
+#include "threading/Mutex.h"
 
-struct mozilla::detail::MutexImpl::PlatformData
+struct js::detail::MutexImpl::PlatformData
 {
   CRITICAL_SECTION criticalSection;
 };
 
-#endif // MutexPlatformData_windows_h
+#endif // platform_win_MutexPlatformData_h

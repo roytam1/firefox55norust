@@ -8,8 +8,6 @@ FINAL_LIBRARY = 'mozglue'
 
 EXPORTS.mozilla += [
     'AutoProfilerLabel.h',
-    'PlatformConditionVariable.h',
-    'PlatformMutex.h',
     'Printf.h',
     'StackWalk.h',
     'TimeStamp.h',
@@ -51,14 +49,3 @@ elif CONFIG['OS_ARCH'] == 'Darwin':
     ]
 elif CONFIG['COMPILE_ENVIRONMENT']:
     error('No TimeStamp implementation on this platform.  Build will not succeed')
-
-if CONFIG['OS_ARCH'] == 'WINNT':
-    SOURCES += [
-        'ConditionVariable_windows.cpp',
-        'Mutex_windows.cpp',
-    ]
-else:
-    SOURCES += [
-        'ConditionVariable_posix.cpp',
-        'Mutex_posix.cpp',
-    ]
