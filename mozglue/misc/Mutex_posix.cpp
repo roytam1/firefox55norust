@@ -27,36 +27,22 @@ mozilla::detail::MutexImpl::MutexImpl()
 {
   pthread_mutexattr_t* attrp = nullptr;
 
-  // Linux with glibc and FreeBSD support adaptive mutexes that spin
-  // for a short number of tries before sleeping.  NSPR's locks did
-  // this, too, and it seems like a reasonable thing to do.
-#if (defined(__linux__) && defined(__GLIBC__)) || defined(__FreeBSD__)
-#define ADAPTIVE_MUTEX_SUPPORTED
-#endif
-
-#if defined(DEBUG)
-#define ATTR_REQUIRED
-#define MUTEX_KIND PTHREAD_MUTEX_ERRORCHECK
-#elif defined(ADAPTIVE_MUTEX_SUPPORTED)
-#define ATTR_REQUIRED
-#define MUTEX_KIND PTHREAD_MUTEX_ADAPTIVE_NP
-#endif
-
-#if defined(ATTR_REQUIRED)
+#ifdef DEBUG
   pthread_mutexattr_t attr;
 
   TRY_CALL_PTHREADS(pthread_mutexattr_init(&attr),
                     "mozilla::detail::MutexImpl::MutexImpl: pthread_mutexattr_init failed");
 
-  TRY_CALL_PTHREADS(pthread_mutexattr_settype(&attr, MUTEX_KIND),
+  TRY_CALL_PTHREADS(pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK),
                     "mozilla::detail::MutexImpl::MutexImpl: pthread_mutexattr_settype failed");
+
   attrp = &attr;
 #endif
 
   TRY_CALL_PTHREADS(pthread_mutex_init(&platformData()->ptMutex, attrp),
                     "mozilla::detail::MutexImpl::MutexImpl: pthread_mutex_init failed");
 
-#if defined(ATTR_REQUIRED)
+#ifdef DEBUG
   TRY_CALL_PTHREADS(pthread_mutexattr_destroy(&attr),
                     "mozilla::detail::MutexImpl::MutexImpl: pthread_mutexattr_destroy failed");
 #endif

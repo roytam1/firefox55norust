@@ -12,8 +12,6 @@
 
 #include "PoisonIOInterposer.h"
 
-#include "prlock.h"
-
 #ifdef MOZ_REPLACE_MALLOC
 #include "replace_malloc_bridge.h"
 #endif

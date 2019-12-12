@@ -7,9 +7,10 @@
 #ifndef mozilla_Mutex_h
 #define mozilla_Mutex_h
 
+#include "prlock.h"
+
 #include "mozilla/BlockingResourceBase.h"
 #include "mozilla/GuardObjects.h"
-#include "mozilla/PlatformMutex.h"
 
 //
 // Provides:
@@ -33,7 +34,7 @@ namespace mozilla {
  * include leak checking.  Sometimes you want to intentionally "leak" a mutex
  * until shutdown; in these cases, OffTheBooksMutex is for you.
  */
-class OffTheBooksMutex : public detail::MutexImpl, BlockingResourceBase
+class OffTheBooksMutex : BlockingResourceBase
 {
 public:
   /**
@@ -43,46 +44,45 @@ public:
    *          by Mutex::DestroyMutex()
    **/
   explicit OffTheBooksMutex(const char* aName)
-    : detail::MutexImpl()
-    , BlockingResourceBase(aName, eMutex)
-#ifdef DEBUG
-    , mOwningThread(nullptr)
-#endif
+    : BlockingResourceBase(aName, eMutex)
   {
+    mLock = PR_NewLock();
+    if (!mLock) {
+      MOZ_CRASH("Can't allocate mozilla::Mutex");
+    }
   }
 
   ~OffTheBooksMutex()
   {
-#ifdef DEBUG
-    MOZ_ASSERT(!mOwningThread, "destroying a still-owned lock!");
-#endif
+    NS_ASSERTION(mLock,
+                 "improperly constructed Lock or double free");
+    // NSPR does consistency checks for us
+    PR_DestroyLock(mLock);
+    mLock = 0;
   }
 
 #ifndef DEBUG
   /**
-   * Lock this mutex.
+   * Lock
+   * @see prlock.h
    **/
-  void Lock() { this->lock(); }
+  void Lock() { PR_Lock(mLock); }
 
   /**
-   * Unlock this mutex.
+   * Unlock
+   * @see prlock.h
    **/
-  void Unlock() { this->unlock(); }
+  void Unlock() { PR_Unlock(mLock); }
 
   /**
-   * Assert that the current thread owns this mutex in debug builds.
-   *
-   * Does nothing in non-debug builds.
+   * AssertCurrentThreadOwns
+   * @see prlock.h
    **/
   void AssertCurrentThreadOwns() const {}
 
   /**
-   * Assert that the current thread does not own this mutex.
-   *
-   * Note that this function is not implemented for debug builds *and*
-   * non-debug builds due to difficulties in dealing with memory ordering.
-   *
-   * It is therefore mostly useful as documentation.
+   * AssertNotCurrentThreadOwns
+   * @see prlock.h
    **/
   void AssertNotCurrentThreadOwns() const {}
 
@@ -90,7 +90,10 @@ public:
   void Lock();
   void Unlock();
 
-  void AssertCurrentThreadOwns() const;
+  void AssertCurrentThreadOwns() const
+  {
+    PR_ASSERT_CURRENT_THREAD_OWNS_LOCK(mLock);
+  }
 
   void AssertNotCurrentThreadOwns() const
   {
@@ -104,11 +107,13 @@ private:
   OffTheBooksMutex(const OffTheBooksMutex&);
   OffTheBooksMutex& operator=(const OffTheBooksMutex&);
 
+  PRLock* mLock;
+
   friend class CondVar;
 
-#ifdef DEBUG
-  PRThread* mOwningThread;
-#endif
+  // MozPromise needs to access mLock for debugging purpose.
+  template<typename, typename, bool>
+  friend class MozPromise;
 };
 
 /**
