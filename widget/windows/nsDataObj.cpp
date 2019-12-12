@@ -37,6 +37,7 @@
 
 #include "WinUtils.h"
 #include "mozilla/LazyIdleThread.h"
+#include "mozilla/WindowsVersion.h"
 #include <algorithm>
 
 

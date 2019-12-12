@@ -10,6 +10,7 @@
 #include "mozilla/MouseEvents.h"
 #include "mozilla/MiscEvents.h"
 #include "mozilla/TextEvents.h"
+#include "mozilla/WindowsVersion.h"
 
 #include "nsAlgorithm.h"
 #ifdef MOZ_CRASHREPORTER

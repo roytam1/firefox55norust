@@ -20,6 +20,7 @@
 #include "mozilla/MiscEvents.h"
 #include "mozilla/MouseEvents.h"
 #include "mozilla/Preferences.h"
+#include "mozilla/WindowsVersion.h"
 
 #include <psapi.h>
 
