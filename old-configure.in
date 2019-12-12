@@ -2222,7 +2222,7 @@ ACCESSIBILITY=1
 MOZ_TIME_MANAGER=
 MOZ_CONTENT_SANDBOX=
 MOZ_GMP_SANDBOX=
-MOZ_SANDBOX=1
+MOZ_SANDBOX=
 MOZ_BINARY_EXTENSIONS=
 MOZ_DEVTOOLS=server
 
@@ -3640,10 +3640,10 @@ if test -n "$MOZ_TSAN" -o -n "$MOZ_ASAN"; then
     esac
 fi
 
-MOZ_ARG_DISABLE_BOOL(sandbox,
-[  --disable-sandbox        Disable sandboxing support],
-    MOZ_SANDBOX=,
-    MOZ_SANDBOX=1)
+MOZ_ARG_ENABLE_BOOL(sandbox,
+[  --enable-sandbox        Enable sandboxing support],
+    MOZ_SANDBOX=1,
+    MOZ_SANDBOX=)
 
 dnl ========================================================
 dnl = Content process sandboxing
@@ -3675,7 +3675,7 @@ MOZ_ARG_ENABLE_BOOL(content-sandbox,
     MOZ_CONTENT_SANDBOX=)
 
 if test -n "$MOZ_CONTENT_SANDBOX" -a -z "$MOZ_SANDBOX"; then
-    AC_MSG_ERROR([--enable-content-sandbox and --disable-sandbox are conflicting options])
+    AC_MSG_ERROR([--enable-content-sandbox requires --enable-sandbox])
 fi
 
 if test -n "$MOZ_CONTENT_SANDBOX"; then
