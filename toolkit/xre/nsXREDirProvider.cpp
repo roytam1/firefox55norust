@@ -49,6 +49,7 @@
 #include "city.h"
 #include <windows.h>
 #include <shlobj.h>
+#include "mozilla/WindowsVersion.h"
 #endif
 #ifdef XP_MACOSX
 #include "nsILocalFileMac.h"
@@ -689,7 +690,17 @@ nsXREDirProvider::LoadContentProcessTempDir()
 static bool
 IsContentSandboxDisabled()
 {
-  return !BrowserTabsRemoteAutostart() || (GetEffectiveContentSandboxLevel() < 1);
+  if (!BrowserTabsRemoteAutostart()) {
+    return false;
+  }
+#if defined(XP_WIN)
+  const bool isSandboxDisabled = !mozilla::IsVistaOrLater() ||
+    (GetEffectiveContentSandboxLevel() < 1);
+#elif defined(XP_MACOSX)
+  const bool isSandboxDisabled =
+    GetEffectiveContentSandboxLevel() < 1;
+#endif
+  return isSandboxDisabled;
 }
 
 //
@@ -1120,18 +1131,30 @@ nsXREDirProvider::DoShutdown()
 
 #ifdef XP_WIN
 static nsresult
-GetShellFolderPath(KNOWNFOLDERID folder, nsAString& _retval)
+GetShellFolderPath(int folder, nsAString& _retval)
 {
-  DWORD flags = KF_FLAG_SIMPLE_IDLIST | KF_FLAG_DONT_VERIFY | KF_FLAG_NO_ALIAS;
-  PWSTR path = nullptr;
+  wchar_t* buf;
+  uint32_t bufLength = _retval.GetMutableData(&buf, MAXPATHLEN + 3);
+  NS_ENSURE_TRUE(bufLength >= (MAXPATHLEN + 3), NS_ERROR_OUT_OF_MEMORY);
 
-  if (!SUCCEEDED(SHGetKnownFolderPath(folder, flags, NULL, &path))) {
-    return NS_ERROR_NOT_AVAILABLE;
+  nsresult rv = NS_OK;
+
+  LPITEMIDLIST pItemIDList = nullptr;
+
+  if (SUCCEEDED(SHGetSpecialFolderLocation(nullptr, folder, &pItemIDList)) &&
+      SHGetPathFromIDListW(pItemIDList, buf)) {
+    // We're going to use wcslen (wcsnlen not available in msvc7.1) so make
+    // sure to null terminate.
+    buf[bufLength - 1] = L'\0';
+    _retval.SetLength(wcslen(buf));
+  } else {
+    _retval.SetLength(0);
+    rv = NS_ERROR_NOT_AVAILABLE;
   }
 
-  _retval = nsDependentString(path);
-  CoTaskMemFree(path);
-  return NS_OK;
+  CoTaskMemFree(pItemIDList);
+
+  return rv;
 }
 
 /**
@@ -1347,7 +1370,7 @@ nsXREDirProvider::GetUpdateRootDir(nsIFile* *aResult)
   // Program Files> if app dir is under Program Files to avoid the
   // folder virtualization mess on Windows Vista
   nsAutoString programFiles;
-  rv = GetShellFolderPath(FOLDERID_ProgramFiles, programFiles);
+  rv = GetShellFolderPath(CSIDL_PROGRAM_FILES, programFiles);
   NS_ENSURE_SUCCESS(rv, rv);
 
   programFiles.Append('\\');
@@ -1461,12 +1484,12 @@ nsXREDirProvider::GetUserDataDirectoryHome(nsIFile** aFile, bool aLocal)
 #elif defined(XP_WIN)
   nsString path;
   if (aLocal) {
-    rv = GetShellFolderPath(FOLDERID_LocalAppData, path);
+    rv = GetShellFolderPath(CSIDL_LOCAL_APPDATA, path);
     if (NS_FAILED(rv))
       rv = GetRegWindowsAppDataFolder(aLocal, path);
   }
   if (!aLocal || NS_FAILED(rv)) {
-    rv = GetShellFolderPath(FOLDERID_RoamingAppData, path);
+    rv = GetShellFolderPath(CSIDL_APPDATA, path);
     if (NS_FAILED(rv)) {
       if (!aLocal)
         rv = GetRegWindowsAppDataFolder(aLocal, path);
