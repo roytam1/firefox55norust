@@ -20,7 +20,7 @@ mitmproxy==2.0.2
 packaging==16.8
 passlib==1.7.1
 pathtools==0.1.2
-pyasn1==0.2.3
+pyasn1==0.6.4
 pycparser==2.17
 pyOpenSSL==16.2.0
 pyparsing==2.2.0
